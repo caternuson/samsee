@@ -11,24 +11,46 @@
 
 #define LED0 GPIO(GPIO_PORTA, 27)
 
-#define MAX_IRQ_COUNT  10
-uint8_t irq_count = 0;
-volatile uint16_t status[MAX_IRQ_COUNT];
-volatile uint8_t intflag[MAX_IRQ_COUNT];
-volatile uint8_t data[MAX_IRQ_COUNT];
+uint8_t reg_buffer[256];
+uint8_t reg_addr;
+uint8_t dir;
+bool first_byte = true;
 
 void SERCOM1_Handler(void) {
-  // for now, just storing some stuff
-  if (irq_count < MAX_IRQ_COUNT) {
-    status[irq_count] = SERCOM1->I2CS.STATUS.reg;
-    intflag[irq_count] = SERCOM1->I2CS.INTFLAG.reg;
-    data[irq_count] = SERCOM1->I2CS.DATA.reg;
-    irq_count++;
+  //
+  // ADDRESS MATCH
+  //
+  if (SERCOM1->I2CS.INTFLAG.bit.AMATCH) {
+    dir = SERCOM1->I2CS.STATUS.bit.DIR;
+    hri_sercomi2cs_clear_INTFLAG_AMATCH_bit(SERCOM1);
   }
-  // and clearing all interrupts
-  hri_sercomi2cs_clear_INTFLAG_AMATCH_bit(SERCOM1);
-  hri_sercomi2cs_clear_INTFLAG_PREC_bit(SERCOM1);
-  hri_sercomi2cs_clear_INTFLAG_DRDY_bit(SERCOM1);
+
+  //
+  // DATA READY
+  //
+  else if (SERCOM1->I2CS.INTFLAG.bit.DRDY) {
+    if (dir) {
+      // READ controller is reading from target
+      SERCOM1->I2CS.DATA.reg = reg_buffer[reg_addr];
+    } else {
+      // WRITE controller is writing to target
+      if (first_byte) {
+        reg_addr = SERCOM1->I2CS.DATA.reg;
+        first_byte = false;
+      } else {
+        reg_buffer[reg_addr] = SERCOM1->I2CS.DATA.reg;
+      }
+    }
+    hri_sercomi2cs_clear_INTFLAG_DRDY_bit(SERCOM1);
+  }
+
+  //
+  // STOP
+  //
+  else if (SERCOM1->I2CS.INTFLAG.bit.PREC) {
+    first_byte = true;
+    hri_sercomi2cs_clear_INTFLAG_PREC_bit(SERCOM1);
+  }
 }
 
 int main() {
