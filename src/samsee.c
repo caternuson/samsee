@@ -67,15 +67,18 @@ int main() {
   _gclk_enable_channel(SERCOM1_GCLK_ID_SLOW, CONF_GCLK_SERCOM1_SLOW_SRC);
 
   // sercom (i2c_s_async_init + i2c_s_async_set_addr)
-  NVIC_DisableIRQ((IRQn_Type)10);                     //
-  NVIC_ClearPendingIRQ((IRQn_Type)10);                // NVIC setup
-  NVIC_EnableIRQ((IRQn_Type)10);                      //
+  NVIC_DisableIRQ((IRQn_Type)10);                 // NVIC setup
+  NVIC_ClearPendingIRQ((IRQn_Type)10);            // see table 10-3 in SAMD10 datasheet
+  NVIC_EnableIRQ((IRQn_Type)10);                  // SERCOM1 NVIC Line = 10
 
-  hri_sercomi2cs_clear_CTRLA_ENABLE_bit(SERCOM1);     // disable to allow writing to protected registers
-  hri_sercomi2cs_set_CTRLA_MODE_bf(SERCOM1, 0x04);    // write 0x04 to CTRLA.MODE to set I2C target mode
-  hri_sercomi2cs_set_ADDR_ADDR_bf(SERCOM1, 0x42);     // set address
-  hri_sercomi2cs_set_CTRLA_ENABLE_bit(SERCOM1);       // enable
-  hri_sercomi2cs_set_INTEN_reg(SERCOM1, 0x87);        // enable all interrupts
+  SERCOM1->I2CS.CTRLA.bit.ENABLE = 0x00;          // disable to allow writing to protected registers
+  SERCOM1->I2CS.CTRLA.bit.MODE = 0x04;            // write 0x04 to CTRLA.MODE to set I2C target mode
+  SERCOM1->I2CS.ADDR.bit.ADDR = 0x42;             // set address
+  SERCOM1->I2CS.CTRLA.bit.ENABLE = 0x01;          // enable, done writing to protected registers
+  SERCOM1->I2CS.INTENSET.bit.ERROR = 0x01;        // enable ERROR interrupt
+  SERCOM1->I2CS.INTENSET.bit.DRDY = 0x01;         // enable DRDY interrupt
+  SERCOM1->I2CS.INTENSET.bit.AMATCH = 0x01;       // enable AMATCH interrupt
+  SERCOM1->I2CS.INTENSET.bit.PREC = 0x01;         // enable PREC (stop) interrupt
 
   // pins (I2C_0_PORT_init)
   gpio_set_pin_pull_mode(PA22, GPIO_PULL_OFF);             // SDA pin setup
@@ -92,8 +95,8 @@ int main() {
   gpio_set_pin_level(LED0, false);
   gpio_set_pin_direction(LED0, GPIO_DIRECTION_OUT);
   gpio_set_pin_function(LED0, GPIO_PIN_FUNCTION_OFF);
-  // blink forever
 
+  // blink forever
   while (1) {
     gpio_set_pin_level(LED0, true);
     delay_ms(100);
